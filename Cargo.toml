@@ -1,0 +1,23 @@
+[package]
+name = "pyfst"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "pyfst"
+# "cdylib" is necessary to produce a shared library for Python to import from.
+#
+# Downstream Rust code (including code in `bin/`, `examples/`, and `tests/`) will not be able
+# to `use string_sum;` unless the "rlib" or "lib" crate type is also included, e.g.:
+# crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
+
+[dependencies]
+fst = "0.4"
+memmap = "0.7"
+regex-automata = { version = "0.1.10", features = ["transducer"] }
+indexmap = "1.7.0"
+
+[dependencies.pyo3]
+version = "0.14.3"
+features = ["extension-module", "indexmap"]
