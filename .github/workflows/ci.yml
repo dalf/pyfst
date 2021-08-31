@@ -4,36 +4,87 @@ on:
   push:
     branches:
     - master
+
 jobs:
-  test:
-    name: test
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+        target: [x64, x86]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.target }}
+      - name: Update rustup
+        run: rustup self update
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          default: true
+      - name: Build
+        if: matrix.target == 'x64'
+        run: cargo build --release
+      - name: Build wheels
+        uses: messense/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: -i python --release --out dist --no-sdist
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
+
+  linux:
     runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+        target: [x86_64, i686]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
       with:
         fetch-depth: 1
-
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         profile: minimal
         override: true
-
-    - name: Check formatting
-      run: |
-        cargo fmt --all -- --check
-
-    - name: Set up QEMU
-      id: qemu
-      uses: docker/setup-qemu-action@v1
+    - name: Build Wheels
+      uses: messense/maturin-action@v1
       with:
-        image: tonistiigi/binfmt:latest
-        platforms: all
-
-    - uses: messense/maturin-action@v1
+        target: ${{ matrix.target }}
+        manylinux: auto
+        args: -i python${{ matrix.python-version }} --release --out dist --no-sdist
+    - name: Upload wheels
+      uses: actions/upload-artifact@v2
       with:
-        maturin-version: latest
-        command: build
-        args: --release
+        name: wheels
+        path: dist
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags/')"
+    needs: [ windows, linux ]
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: wheels
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Publish to PyPi
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
+          pip install --upgrade wheel pip setuptools twine
+          twine upload --skip-existing *
