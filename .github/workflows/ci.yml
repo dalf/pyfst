@@ -4,6 +4,10 @@ on:
   push:
     branches:
     - master
+  release:
+    types:
+      - released
+      - prereleased
 
 jobs:
   windows:
